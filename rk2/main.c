@@ -5,6 +5,9 @@
 #include <X11/keysym.h>
 #include <X11/keysymdef.h>
 
+#define FPS 60
+#define SPEED 10
+
 static Display* dpy;              /* Graphic Display */
 static GC gc[3];                /* all Graphic Context */
 static Window win;                /* root & main windows id */
@@ -15,20 +18,14 @@ XPoint xp[3];
 int xpp(){
     XWindowAttributes attrr;
     XGetWindowAttributes(dpy, win, &attrr);
-    int l=(attrr.width/3<attrr.height/2)?attrr.width/3:attrr.height/2;
-    /*xp[0].x=320;
-    xp[0].y=480;
-    xp[1].x=320+320*sin(120*M_PI/180);
-    xp[1].y=240+240*cos(120*M_PI/180);
-    xp[2].x=320+320*sin(240*M_PI/180);
-    xp[2].y=240+240*cos(240*M_PI/180);*/
-    xp[0].x=attrr.width/2-l/2;
-    xp[0].y=attrr.height/2;
-    xp[1].x=attrr.width/2+l/2;
-    xp[1].y=attrr.height/2;
-    xp[2].x=attrr.width/2;
-    xp[2].y=attrr.height/2;
-    l1=l2=l/2;
+    int l = (attrr.width / 3 < attrr.height / 2) ? attrr.width / 3 : attrr.height / 2;
+    xp[0].x = attrr.width / 2 - l / 2;
+    xp[0].y = attrr.height / 2;
+    xp[1].x = attrr.width / 2 + l / 2;
+    xp[1].y = attrr.height / 2;
+    xp[2].x = attrr.width / 2;
+    xp[2].y = attrr.height / 2;
+    l1 = l2 = l/2;
     return 0;
 }
 
@@ -38,14 +35,6 @@ int rekey(XEvent* ev) {
     KeySym code[1];            /* key pressed symbol X code */
     XLookupString((XKeyEvent* ) ev, NULL, 0, code, NULL);
     switch(code[0]) {
-        /*case XK_plus:
-        case XK_KP_Add:
-           return(1);
-        case XK_minus:
-        case XK_KP_Subtract:
-          return(-1);
-        case XK_Escape:
-              return(0);*/
         case XK_h:
         case XK_H:
             if(ev->xkey.state == ControlMask)
@@ -56,38 +45,29 @@ int rekey(XEvent* ev) {
     return(2);
 }
 
-int redraw(int jij){ //(s<b)?s:b; draw(a,b,c)
+int redraw(int jij){
     XWindowAttributes attrr;
     XGetWindowAttributes(dpy, win, &attrr);
     XClearWindow(dpy, win);
-    int l=(attrr.width/3<attrr.height/2)?attrr.width/3:attrr.height/2;
-    if(change==0)
-        if((attrr.height/2!=xp[0].y)||(attrr.width/2-l/2!=xp[0].x))
+    int l = (attrr.width / 3 < attrr.height / 2) ? attrr.width / 3 : attrr.height / 2;
+    if (change == 0)
+        if ((attrr.height/2!=xp[0].y)||(attrr.width/2-l/2!=xp[0].x))
             xpp();
-    if(change==1)
+    if (change == 1)
         XWarpPointer(dpy, win, win,0,0,attrr.width,attrr.height,xp[2].x,attrr.height/2);
-    xp[0].x=xp[2].x+l2*sin((jij+90)%360*M_PI/180);
-    xp[0].y=attrr.height/2+l2*cos((jij+90)%360*M_PI/180);
-    xp[1].x=xp[2].x+l1*sin((jij+270)%360*M_PI/180);
-    xp[1].y=attrr.height/2+l1*cos((jij+270)%360*M_PI/180);
-    //xp[0].x=attrr.width/2-l/2;
-    //xp[0].y=attrr.height/2;
-    //xp[1].x=attrr.width/2+l/2;
-    //xp[1].y=attrr.height/2;
-    //xp[2].x=attrr.width/2+attrr.width/2*sin((jij+240)%360*M_PI/180);
-    //xp[2].y=attrr.height/2+attrr.height/2*cos((jij+240)%360*M_PI/180);
-    //XFillPolygon(dpy, win, gc[2], xp, 3, Convex, CoordModeOrigin);
+    xp[0].x = xp[2].x+l2*sin((jij+90)%360*M_PI/180);
+    xp[0].y = attrr.height/2+l2*cos((jij+90)%360*M_PI/180);
+    xp[1].x = xp[2].x+l1*sin((jij+270)%360*M_PI/180);
+    xp[1].y = attrr.height/2+l1*cos((jij+270)%360*M_PI/180);
     XDrawLine(dpy, win, gc[1], xp[2].x, (attrr.height/2), xp[0].x, xp[0].y);
     XDrawLine(dpy, win, gc[1], xp[2].x, (attrr.height/2), xp[1].x, xp[1].y);
-    //XDrawLine(dpy, win, gc[1], (attrr.width/2), (attrr.height/2), xp[2].x, xp[2].y);
-    //XDrawArc(dpy, win, gc[1], 0, 0, attrr.width-1, attrr.height-1, (0*64), (360*64));
 }
 
 int main(int argc, char* argv[]) {
     int scr;
     /* Display Block */
-    int jij=0;
-    int kk=0;
+    int jij = 0;
+    int kk = 0;
     dpy = XOpenDisplay(NULL);
     scr = DefaultScreen(dpy);
     win = DefaultRootWindow(dpy);
@@ -124,15 +104,15 @@ int main(int argc, char* argv[]) {
     /* window block */
     xpp();
     /* Multi Block */
-    int multi=1;
-    int press=0;
-    XWindowAttributes attrr;
+    int multi = 1;
+    int press = 0;
+//    XWindowAttributes attrr;
     XEvent event;
-    while(multi > -1) {
-        XGetWindowAttributes(dpy, win, &attrr);
+    while (multi > -1) {
+//        XGetWindowAttributes(dpy, win, &attrr);
         event.type = 0;
-        XCheckWindowEvent(dpy, win, emask,  &event);
-        switch(event.type) {
+        XCheckWindowEvent(dpy, win, emask, &event);
+        switch (event.type) {
             case Expose:
                 redraw(jij);
                 break;
@@ -140,52 +120,50 @@ int main(int argc, char* argv[]) {
                 redraw(jij);
                 break;
             case KeyPress:
-                switch(rekey(&event)) {
-
+                switch (rekey(&event)) {
                     case 4:
-                        multi=-2;
+                        multi = -2;
                         break;
                     default:
                         break;
                 }/* switch */
                 break;
-            case ButtonPress:  xp[2].x=event.xbutton.x;
-                xp[2].y=event.xbutton.y;
-                if(change==0){
-                    if (xp[2].x>xp[0].x)
-                        xp[2].x=xp[0].x;
-                    else
-                    if(xp[2].x<xp[1].x)
-                        xp[2].x=xp[1].x;
-                    l1=xp[2].x-xp[1].x;
-                    l2=xp[0].x-xp[2].x;
-                    change=1;
+            case ButtonPress:
+                xp[2].x = event.xbutton.x;
+                xp[2].y = event.xbutton.y;
+                if (change == 0) {
+                    if (xp[2].x > xp[0].x)
+                        xp[2].x = xp[0].x;
+                    else if (xp[2].x < xp[1].x)
+                        xp[2].x = xp[1].x;
+                    l1 = xp[2].x - xp[1].x;
+                    l2 = xp[0].x - xp[2].x;
+                    change = 1;
                 }
-                if(event.xbutton.button==Button1)
-                    press=1;
-
-                if(event.xbutton.button==Button3)
-                    press=-1;
-                if (jij==360)
-                    jij=0;
-
+                if (event.xbutton.button == Button1)
+                    press = 1;
+                if (event.xbutton.button == Button3)
+                    press = -1;
+                if (jij == 360)
+                    jij = 0;
                 break;
-            case ButtonRelease:                change=0;
-                press=0;
+            case ButtonRelease:
+                change = 0;
+                press = 0;
                 xpp();
-                jij=0;
+                jij = 0;
                 redraw(jij);
                 break;
             default:
                 break;
         } /* switch */
-        if ((multi>40)&&(press==1)) {
-            multi=1;
+        if ((multi > 40) && (press == 1)) {
+            multi = 1;
             jij++;
             redraw(jij);
         }
-        if ((multi>40)&&(press==-1))  {
-            multi=1;
+        if ((multi > 40) && (press == -1)) {
+            multi = 1;
             jij--;
             redraw(jij);
         }
