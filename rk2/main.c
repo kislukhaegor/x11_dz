@@ -1,175 +1,328 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
-#include <stdio.h>
-#include <math.h>
 #include <X11/keysym.h>
 #include <X11/keysymdef.h>
+#include <stdio.h>
+#include <math.h>
+#include <stlib.h>
 
-#define FPS 60
-#define SPEED 10
+static Display* dpy;
+static GC gc[2];
+static Window root;
+static Window** box;
+static unsigned BW=40;
+static unsigned BH=40;
+static unsigned w=400;
+static unsigned h=400;
+static unsigned NX,NY;
+static XRectangle cell;             /* Box cell */
+static char* mark[] = { "0", "1" }; /* Marker symbols */
+static int copy[1000][1000];
+static int busy[1000][1000];
 
-static Display* dpy;              /* Graphic Display */
-static GC gc[3];                /* all Graphic Context */
-static Window win;                /* root & main windows id */
-static int change=0;
-static int l1,l2;
-XPoint xp[3];
+static unsigned NX;
+static unsigned NY;
 
-int xpp(){
-    XWindowAttributes attrr;
-    XGetWindowAttributes(dpy, win, &attrr);
-    int l = (attrr.width / 3 < attrr.height / 2) ? attrr.width / 3 : attrr.height / 2;
-    xp[0].x = attrr.width / 2 - l / 2;
-    xp[0].y = attrr.height / 2;
-    xp[1].x = attrr.width / 2 + l / 2;
-    xp[1].y = attrr.height / 2;
-    xp[2].x = attrr.width / 2;
-    xp[2].y = attrr.height / 2;
-    l1 = l2 = l/2;
-    return 0;
+/* dynamic memory allocation for all game desk array */
+int alloc(unsigned _nx, unsigned _ny)
+{
+    void** b;
+    int i;
+    NX=_nx; NY=_ny;
+    b=calloc(NY,sizeof(void*));
+    for(i=0;i<NY;i++)
+        b[i] = calloc(NX,sizeof(unsigned long));
+    relink(b);
+    return(0);
 }
 
-
-int rekey(XEvent* ev) {
-    char sym[1];               /* symbol ASCII code */
-    KeySym code[1];            /* key pressed symbol X code */
-    XLookupString((XKeyEvent* ) ev, NULL, 0, code, NULL);
-    switch(code[0]) {
-        case XK_h:
-        case XK_H:
-            if(ev->xkey.state == ControlMask)
-                return(4);
-        default:
-            break;
-    }/* switch */
-    return(2);
+/* free allocated memory */
+int dealloc( void** b)
+{
+    int i;
+    for(i=0; i < NY; i++)
+        free(b[i]);
+    free(b);
+    return(0);
 }
 
-int redraw(int jij){
-    XWindowAttributes attrr;
-    XGetWindowAttributes(dpy, win, &attrr);
-    XClearWindow(dpy, win);
-    int l = (attrr.width / 3 < attrr.height / 2) ? attrr.width / 3 : attrr.height / 2;
-    if (change == 0)
-        if ((attrr.height/2!=xp[0].y)||(attrr.width/2-l/2!=xp[0].x))
-            xpp();
-    if (change == 1)
-        XWarpPointer(dpy, win, win,0,0,attrr.width,attrr.height,xp[2].x,attrr.height/2);
-    xp[0].x = xp[2].x+l2*sin((jij+90)%360*M_PI/180);
-    xp[0].y = attrr.height/2+l2*cos((jij+90)%360*M_PI/180);
-    xp[1].x = xp[2].x+l1*sin((jij+270)%360*M_PI/180);
-    xp[1].y = attrr.height/2+l1*cos((jij+270)%360*M_PI/180);
-    XDrawLine(dpy, win, gc[1], xp[2].x, (attrr.height/2), xp[0].x, xp[0].y);
-    XDrawLine(dpy, win, gc[1], xp[2].x, (attrr.height/2), xp[1].x, xp[1].y);
+int relink(void** b)
+{
+    box = (Window**) b;
+    return(0);
 }
 
-int main(int argc, char* argv[]) {
-    int scr;
-    /* Display Block */
-    int jij = 0;
-    int kk = 0;
-    dpy = XOpenDisplay(NULL);
-    scr = DefaultScreen(dpy);
-    win = DefaultRootWindow(dpy);
-    scr = DefaultScreen(dpy);
-    gc[0] = XCreateGC(dpy, win, 0, 0);
-    gc[1] = XCreateGC(dpy, win, 0, 0);
-    gc[2] = XCreateGC(dpy, win, 0, 0);
-    XSetBackground(dpy, gc[0], 0xFFFFFF);
+void ones(int j,int i)
+{
+    XSetForeground(dpy, gc[0], 0xFF00FF);
+    XDrawString(dpy, box[i][j], gc[0], cell.x, cell.y, mark[1], 1);
     XSetForeground(dpy, gc[0], 0xFFFFFF);
-    XSetBackground(dpy, gc[2], 0xFF0000);
-    XSetForeground(dpy, gc[2], 0xFF0000);
-    XGCValues gvall;
-    gvall.line_style = LineOnOffDash;
-    //XChangeGC(dpy, gc[1], GCLineStyle, &gvall);
-    /* Display block */
+    busy[i][j]=1;
+}
 
-    /* Window block  */
-    XSetWindowAttributes attr;     /* main window attributes structure */
-    unsigned long amask;           /* attribute mask */
-    unsigned long emask;           /* event mask */
-    Window root;                   /* screen root window */
-    XGCValues gval;                /* Graphic Context values structure */
-    XGetGCValues(dpy, gc[0], GCBackground, &gval); /* Get background */
-    attr.background_pixel = gval.background;     /* from GC for window */
-    attr.override_redirect = False;                 /* with WM support */
-    attr.bit_gravity = NorthWestGravity;        /* reconfig Anti-blink */
-    amask = (CWOverrideRedirect | CWBackPixel | CWBitGravity);
-    root = DefaultRootWindow(dpy);
-    win = XCreateWindow(dpy, root, 0, 0, 640, 480, 1, CopyFromParent, InputOutput, CopyFromParent, amask, &attr);
-    XStoreName(dpy, win, "Lion");                     /* Window title */
-    emask = (ExposureMask | KeyPressMask | StructureNotifyMask | ButtonPressMask | ButtonReleaseMask);
-    XSelectInput(dpy, win, emask); /* Select events' types for dispath */
-    XMapWindow(dpy, win);                  /* display window on screen */
-    /* window block */
-    xpp();
-    /* Multi Block */
-    int multi = 1;
-    int press = 0;
-//    XWindowAttributes attrr;
-    XEvent event;
-    while (multi > -1) {
-//        XGetWindowAttributes(dpy, win, &attrr);
-        event.type = 0;
-        XCheckWindowEvent(dpy, win, emask, &event);
-        switch (event.type) {
-            case Expose:
-                redraw(jij);
-                break;
-            case ConfigureNotify:
-                redraw(jij);
-                break;
-            case KeyPress:
-                switch (rekey(&event)) {
-                    case 4:
-                        multi = -2;
-                        break;
-                    default:
-                        break;
-                }/* switch */
-                break;
-            case ButtonPress:
-                xp[2].x = event.xbutton.x;
-                xp[2].y = event.xbutton.y;
-                if (change == 0) {
-                    if (xp[2].x > xp[0].x)
-                        xp[2].x = xp[0].x;
-                    else if (xp[2].x < xp[1].x)
-                        xp[2].x = xp[1].x;
-                    l1 = xp[2].x - xp[1].x;
-                    l2 = xp[0].x - xp[2].x;
-                    change = 1;
+void zeros(int j,int i)
+{
+    XSetForeground(dpy, gc[0], 0xFF00FF);
+    XDrawString(dpy, box[i][j], gc[0], cell.x, cell.y, mark[0], 1);
+    XSetForeground(dpy, gc[0], 0xFFFFFF);
+    busy[i][j]=0;
+}
+void onech(int j,int i)
+{
+    XSetForeground(dpy, gc[0], 0x00FFFF);
+    XDrawString(dpy, box[i][j], gc[0], cell.x, cell.y, mark[0], 1);
+    XSetForeground(dpy, gc[0], 0x000000);
+    XDrawString(dpy, box[i][j], gc[0], cell.x, cell.y, mark[1], 1);
+    busy[i][j]=1;
+}
+void zeroch(int j,int i)
+{
+    XSetForeground(dpy, gc[0], 0x00FFFF);
+    XDrawString(dpy, box[i][j], gc[0], cell.x, cell.y, mark[1], 1);
+    XSetForeground(dpy, gc[0], 0x000000);
+    XDrawString(dpy, box[i][j], gc[0], cell.x, cell.y, mark[0], 1);
+    busy[i][j]=0;
+}
+int rebox(XEvent* ev)
+{
+    int i, j;
+    for(i=0;i<NX;i++)
+        for(j=0;j<NY;j++)
+            if(i==j)
+                onech(i,j);
+            else
+                zeroch(i,j);
+    return(0);
+}
+
+int kraska(int i, int j)
+{
+    XPoint points[4];
+    points[0].y=0;
+    points[0].x=0;
+    points[1].x=40;
+    points[1].y=0;
+    points[2].x=40;
+    points[2].y=40;
+    points[3].x=0;
+    points[3].y=40;
+    XFillPolygon(dpy,box[i][j],gc[0], points, 4,Convex, CoordModeOrigin);
+}
+
+int rebeg()
+{
+    int i,j;
+    for(i=0;i<NY;i++)
+        for(j=0;j<NX;j++)
+            if(copy[i][j]==1)
+                if(busy[i][j]==1)
+                {
+                    XSetForeground(dpy, gc[0], 0x00FFFF);
+                    kraska(i,j);
+                    onech(j,i);
+                    copy[i][j]=0;
                 }
-                if (event.xbutton.button == Button1)
-                    press = 1;
-                if (event.xbutton.button == Button3)
-                    press = -1;
-                if (jij == 360)
-                    jij = 0;
+                else
+                {
+                    XSetForeground(dpy, gc[0], 0x00FFFF);
+                    kraska(i,j);
+                    zeroch(j,i);
+                    copy[i][j]=0;
+                }
+}
+int reset(XEvent* ev)
+{
+    rebeg();
+    int i,j,x;
+    for(i=0;i<NY;i++)
+    {
+        for(j=0;j<NX;j++)
+            if(ev->xbutton.subwindow == box[i][j])
                 break;
-            case ButtonRelease:
-                change = 0;
-                press = 0;
-                xpp();
-                jij = 0;
-                redraw(jij);
-                break;
-            default:
-                break;
-        } /* switch */
-        if ((multi > 40) && (press == 1)) {
-            multi = 1;
-            jij++;
-            redraw(jij);
+        if(ev->xbutton.subwindow == box[i][j])
+            break;
+    }
+
+
+    XSetForeground(dpy, gc[0], 0xFFFFFF);
+    for(x=0;x<NY;x++)
+        if(busy[x][j]==1)
+        {
+            kraska(x,j);
+            zeros(j,x);
+            copy[x][j]=1;
         }
-        if ((multi > 40) && (press == -1)) {
-            multi = 1;
-            jij--;
-            redraw(jij);
+
+    for(x=0;x<NX;x++)
+        if(busy[i][x]==1)
+        {
+            kraska(i,x);
+            zeros(x,i);
+            copy[i][x]=1;
         }
-        multi++;
-    } /* while */
-    XDestroyWindow(dpy, win); /* Close main window */
-    XCloseDisplay(dpy);       /* Disconnect X-server */
-    return 0;
+    kraska(i,j);
+    ones(j,i);
+    copy[i][j]=1;
+
+    return(0);
+
+}
+
+int back()
+{
+    int i,j;
+    for(i=0;i<NY;i++)
+        for(j=0;j<NX;j++)
+            if(copy[i][j]==1)
+                if(busy[i][j]==1)
+                {
+                    XSetForeground(dpy, gc[0], 0x00FFFF);
+                    kraska(i,j);
+                    zeroch(j,i);
+                    copy[i][j]=0;
+                }
+                else
+                {
+                    XSetForeground(dpy, gc[0], 0x00FFFF);
+                    kraska(i,j);
+                    onech(j,i);
+                    copy[i][j]=0;
+                }
+}
+
+int xcustom()
+{
+    int x,y;
+    int dx,dy;
+    int src;
+    int depth;
+    XSetWindowAttributes attr;
+    XSizeHints hint;
+    XFontStruct* fn;           /* Font parameters structure */
+    char* fontname = "9x15";   /* default font name */
+    int i,j;
+
+    src = DefaultScreen(dpy);
+    depth = DefaultDepth(dpy, src);
+    gc[0] = DefaultGC(dpy, src);
+
+/* Font custom */
+
+    if((fn = XLoadQueryFont(dpy, fontname)) == NULL)
+        return(puts("Incorrect FontStruct id"));
+    XSetFont(dpy, gc[0], fn->fid);
+
+    cell.width = fn->max_bounds.width;
+    cell.height = fn->max_bounds.ascent + fn->max_bounds.descent;
+    cell.x = (BW -  fn->max_bounds.width)/2;
+    cell.y = BH/2 + (fn->max_bounds.ascent - fn->max_bounds.descent)/2;
+
+/* Main root window */
+
+    w = NX*BW;
+    h = NY*BH;
+    attr.override_redirect = False;
+    attr.background_pixel = 0xFFFFFF;
+    attr.event_mask = (ButtonPressMask | ButtonReleaseMask | KeyPressMask);
+    x=0; y=0;
+    root = XCreateWindow(dpy, DefaultRootWindow(dpy), x, y, w, h,
+                         1, depth, InputOutput, CopyFromParent,
+                         (CWOverrideRedirect | CWBackPixel | CWEventMask),&attr);
+    hint.flags = (PMinSize | PMaxSize | PPosition);
+    hint.min_width = hint.max_width = w;
+    hint.min_height = hint.max_height = h;
+    hint.x=x; hint.y=y;
+    XSetNormalHints(dpy, root, &hint);
+
+    attr.override_redirect = True;
+    attr.background_pixel = 0x00FFFF;
+    attr.event_mask = (KeyPressMask | ExposureMask );
+    w = BW; h = BH;
+    for(i=0, y=0; i < NY; i++,y+=h)
+    {
+        for(j=0, x=0 ; j < NX; j++, x+=w)
+            box[i][j] = XCreateWindow(dpy, root, x, y, w, h, 1,
+                                      depth, InputOutput, CopyFromParent,
+                                      (CWOverrideRedirect | CWBackPixel | CWEventMask), &attr);
+    }
+
+/* Display windows */
+
+    XMapWindow(dpy, root);
+    XMapSubwindows(dpy, root);
+    for(i=0; i<NY; i++)
+        for(j=0; j<NY; j++)
+            XMapSubwindows(dpy, box[i][j]);
+    XStoreName(dpy, root, "pictogramm");
+
+/* Create clear GC */
+
+    gc[1] = XCreateGC(dpy, root, 0, 0);
+    XCopyGC(dpy, gc[0], GCFont, gc[1]);
+    XSetForeground(dpy, gc[1], 0x00FFFF);
+
+    return(0);
+}
+
+/* KeyBoard Driver */
+
+int kbdrive(XEvent* ev)
+{
+    KeySym sym;
+    XLookupString((XKeyEvent*) ev, NULL, 0, &sym, NULL);
+    switch(sym)
+    {
+        case XK_Escape: back();
+            break;
+        case XK_d:
+        case XK_D: if(ev->xkey.state & ControlMask)
+                return(1);
+            break;
+        default:        break;
+    }
+    return(0);
+}
+
+/* Event dispatcher */
+
+int dispatch()
+{
+    XEvent event;
+    int flag = 0;
+    while(flag == 0)
+    {
+        XNextEvent(dpy, &event);
+        switch(event.type)
+        {
+            case Expose:      rebox(&event);
+                break;
+            case ButtonPress: reset(&event);
+                break;
+            case KeyPress:    flag = kbdrive(&event);
+                break;
+            default:          break;
+        }
+    }
+    return(0);
+}
+
+/* Main function */
+
+int main(int argc, char* argv[])
+{
+    if(argc < 2)
+        fprintf(stderr,"Default: pictogramm 400x400+40+40\n");
+    XParseGeometry(argv[1], &BW, &BH, &w, &h);
+    NX=w/BW;
+    NY=h/BH;
+    alloc(NX, NY);
+    dpy = XOpenDisplay(NULL);
+    if(xcustom() > 0)
+        return(1);
+    dispatch();
+    XDestroySubwindows(dpy, root);
+    XDestroyWindow(dpy, root);
+    XCloseDisplay(dpy);
+    dealloc( box);
+    return(0);
 }
